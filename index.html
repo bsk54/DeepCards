@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="zh" data-theme="">
+<head>
+  <!--************************************************************************************************************-->
+  <!--********************************************* DeepCards ****************************************************-->
+  <!--******************************************** Version 1.00 **************************************************-->
+  <!--******************************************** July 7, 2025 **************************************************-->
+  <!--************************************************************************************************************-->
+  <!---------------------------------------------------------------------------------------------------------------->
+  <!------------------------------------ Code by: Bernd Sebastian Kamps -------------------------------------------->
+  <!---------------------------------------------------------------------------------------------------------------->
+  <!-- Description: DeepCards is a single-page web application designed for studying vocabulary in any language.  -->
+  <!-- After you load a list of entries separated by "#" or a tab, each entry appears as a numbered card that     -->
+  <!-- displays only the word or phrase in your target language. Most languages have two columns, while Chinese  --->
+  <!-- and Pinyin use three columns with translations. An arrow in the corner toggles the card open or closed to  -->
+  <!-- reveal or hide the definition, and the word’s pronunciation plays each time you toggle. Each card also     -->
+  <!-- has a record button that captures and plays back your own pronunciation (with WAV fallback on iOS). You    -->
+  <!-- can manage multiple vocabulary lists via the dropdown menu, switch speech languages in the ☰ menu, and     -->
+  <!-- save, restore, or export your data. All of this is backed by localStorage.                                 -->
+  <!--************************************************************************************************************-->
+  <!-- Repository: https://github.com/bsk54/DeepCards.git ---------------------------------------------------------->
+  <!-- Web site:   https://aiopop.com/DeepCards -------------------------------------------------------------------->
+  <!--************************************************************************************************************-->
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DeepCards</title>
+  <link rel="icon" href="DeepCards.png" type="image/png">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap');
+
+    /* ─── Light & Dark CSS Variables ─── */
+    :root {
+      --tone1: #FF4C4C;
+      --tone2: #FFC107;
+      --tone3: #2196F3;
+      --tone4: #4CAF50;
+      --bg: #f0f2f5;
+      --card-bg: #fff;
+      --text-main: #2c3e50;
+      --text-sub: #7f8c8d;
+      --shadow: rgba(0,0,0,0.1);
+      --spacing: 0.5rem;
+    }
+    [data-theme="dark"] {
+      --bg: #121212;
+      --card-bg: #1e1e1e;
+      --text-main: #e0e0e0;
+      --text-sub: #aaa;
+      --shadow: rgba(0,0,0,0.7);
+    }
+    /* Auto-apply OS preference if no explicit choice */
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme]) {
+        --bg: #121212;
+        --card-bg: #1e1e1e;
+        --text-main: #e0e0e0;
+        --text-sub: #aaa;
+        --shadow: rgba(0,0,0,0.7);
+      }
+    }
+
+    body {
+      margin: 0; padding: 0;
+      background: var(--bg);
+      font-family: 'Montserrat', sans-serif;
+      color: var(--text-main);
+      position: relative;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border-radius: 12px;
+      box-shadow: 0 4px 16px var(--shadow);
+      overflow: visible;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem;
+      font-size: 1.6rem;
+      font-weight: 600;
+      background: linear-gradient(90deg,
+        var(--tone1) 0%, var(--tone2) 25%,
+        var(--tone3) 50%, var(--tone4) 75%);
+      color: #fff;
+    }
+    #progressIndicator {
+      font-size: 0.9rem;
+      color: var(--tone2);
+      font-weight: 400;
+    }
+    #floatingProgress {
+      display: none;
+      position: fixed;
+      top: 1rem; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      z-index: 2000;
+      pointer-events: none;
+    }
+    #loader {
+      padding: 1.5rem;
+      background: var(--card-bg);
+      position: relative;
+    }
+    #closeLoader {
+      position: absolute; top: 1rem; right: 1rem;
+      background: transparent;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      cursor: pointer;
+    }
+    #rawInput {
+      width: 100%; height: 120px;
+      padding: 0.75rem;
+      font-family: monospace;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      resize: vertical;
+      margin-bottom: 1rem;
+    }
+    button.main-action {
+      padding: 0.5rem 1rem;
+      background: var(--tone1);
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button.main-action:hover {
+      background: var(--tone4);
+    }
+    .radio-group {
+      margin-bottom: 1rem;
+    }
+    .radio-group label {
+      margin-right: 1rem;
+      font-weight: 500;
+    }
+
+    nav {
+      position: relative;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: var(--tone3);
+    }
+    nav a {
+      color: #fff;
+      font-weight: 500;
+      text-decoration: none;
+      margin-right: 0.5rem;
+    }
+    #navListSelect {
+      margin-left: 1rem;
+      padding: 0.25rem;
+      border-radius: 4px;
+      border: none;
+    }
+    .menu-btn {
+      font-size: 1.4rem;
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+    }
+    .menu-dropdown {
+      position: absolute;
+      top: 100%; right: 1rem;
+      width: 220px;
+      background: var(--card-bg);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px var(--shadow);
+      max-height: 70vh;
+      overflow-y: auto;
+      padding: 0.5rem;
+      display: none;
+      z-index: 1000;
+    }
+    .menu-dropdown select,
+    .menu-dropdown button,
+    .menu-dropdown label {
+      display: block;
+      width: 100%;
+      background: none;
+      border: none;
+      text-align: left;
+      padding: 0.5rem 0.25rem;
+      cursor: pointer;
+      font-size: 1rem;
+      color: var(--text-main);
+    }
+    .menu-dropdown select {
+      margin-bottom: 0.5rem;
+      background: #f7f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+    .menu-dropdown hr {
+      border: none;
+      border-top: 1px solid #eee;
+      margin: 0.5rem 0;
+    }
+    .menu-dropdown select:focus,
+    .menu-dropdown button:hover,
+    .menu-dropdown label:hover {
+      background: var(--tone2);
+      color: #fff;
+      border-radius: 4px;
+    }
+    /* ─── Dark-Mode Toggle ─── */
+    #darkModeToggle {
+      margin-right: 0.5rem;
+    }
+
+    #listName {
+      padding: 1rem;
+      font-size: 1.2rem;
+      font-weight: 500;
+      background: #fafafa;
+      border-bottom: 1px solid #eee;
+    }
+    [data-theme="dark"] #listName {
+      background: #2a2a2a;
+      border-color: #444;
+    }
+
+    main {
+      padding: 1rem;
+    }
+    .card {
+      position: relative;
+      background: var(--card-bg);
+      border-left: 6px solid var(--tone1);
+      box-shadow: 0 2px 8px var(--shadow);
+      border-radius: 6px;
+      padding: 0.5rem 1rem 0.5rem 0.75rem;
+      padding-right: calc(1rem + 30px);
+      margin-bottom: var(--spacing);
+      transition: transform 0.2s;
+      cursor: pointer;
+    }
+    .card:hover { transform: translateY(-2px); }
+    .card:nth-child(4n+1) { border-color: var(--tone1); }
+    .card:nth-child(4n+2) { border-color: var(--tone2); }
+    .card:nth-child(4n+3) { border-color: var(--tone3); }
+    .card:nth-child(4n)   { border-color: var(--tone4); }
+
+    .card-number {
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+    .hanzi {
+      font-size: 1.6rem;
+      color: var(--text-main);
+      vertical-align: middle;
+    }
+    .card em {
+      display: block;
+      margin-top: 0.5rem;
+      font-size: 1rem;
+      color: var(--text-sub);
+    }
+    .card small {
+      display: block;
+      margin-top: 0.25rem;
+      font-size: 0.875rem;
+      color: #888;
+    }
+
+    .toggle-btn {
+      position: absolute;
+      top: 0.75rem; right: 1rem;
+      width: 30px; height: 30px;
+      background: #fff;
+      border-radius: 4px;
+      border: 1px solid var(--text-sub);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      color: var(--text-sub);
+      transition: background 0.2s, color 0.2s;
+    }
+    .toggle-btn:hover {
+      background: var(--text-sub);
+      color: #fff;
+    }
+
+    .record-btn {
+      display: inline-block;
+      margin-top: 0.5rem;
+      padding: 0.25rem 0.5rem;
+      background: var(--tone2);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .record-btn.recording { background: #c0392b; }
+    .playback {
+      display: block;
+      margin-top: 0.5rem;
+      width: 100%;
+    }
+
+    /* ─── Slider Overlay ─── */
+    #speedOverlay {
+      display: none;
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--card-bg);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px var(--shadow);
+      padding: 1rem 1.5rem;
+      z-index: 3000;
+      text-align: center;
+      min-width: 240px;
+    }
+    #speedOverlay input[type=range] {
+      width: 100%;
+      margin: 0.75rem 0;
+    }
+    #speedOverlay label {
+      font-weight: 600;
+      color: var(--tone3);
+    }
+
+    /* ─── Custom Scrollbar ─── */
+    .custom-scrollbar {
+      position: fixed;
+      top: 0; right: 0;
+      width: 30px; height: 100vh;
+      background: transparent;
+      opacity: 0;
+      transition: opacity 200ms ease;
+      pointer-events: none;
+      z-index: 1500;
+    }
+    .custom-scrollbar.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .custom-scrollbar .thumb {
+      position: absolute;
+      width: 100%;
+      background: rgba(33,150,243,0.1);
+      border-radius: 4px;
+      cursor: pointer;
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="floatingProgress">0 / 0 closed</div>
+
+  <div class="container">
+    <header>
+      <span id="appTitle">DeepCards</span>
+      <span id="progressIndicator">0 / 0 closed</span>
+    </header>
+
+    <section id="loader">
+      <button id="closeLoader">Close</button>
+      <p>
+        Paste your words (2 or 3 columns) separated by TAB or #:<br>
+        <small>Hanzi TAB/# Pinyin [TAB/# Definition]</small>
+      </p>
+      <div class="radio-group">
+        <label><input type="radio" name="loadMode" value="new" checked> Create New List</label>
+        <label><input type="radio" name="loadMode" value="add"> Add to Current List</label>
+      </div>
+      <textarea id="rawInput"></textarea>
+      <button id="loadBtn" class="main-action">Execute</button>
+    </section>
+
+    <nav>
+      <div>
+        <a href="#/cards">Cards</a>
+        <select id="navListSelect"></select>
+      </div>
+      <button class="menu-btn" id="menuBtn">☰</button>
+      <div class="menu-dropdown" id="menuDropdown">
+        <!-- Language & Voice -->
+        <select id="langSelect"></select>
+        <select id="voiceSelect"></select>
+        <hr>
+        <!-- List Ops -->
+        <button id="loadNewBtn">New List</button>
+        <button id="renameBtn">Rename List</button>
+        <button id="deleteBtn">Delete List</button>
+        <hr>
+        <!-- File Ops -->
+        <button id="saveFileBtn">Save to file</button>
+        <button id="restoreFileBtn">Restore from file</button>
+        <button id="exportBtn">Export</button>
+        <hr>
+        <!-- Card Ops -->
+        <button id="editCardsBtn">🖉 Edit Cards</button>
+        <button id="deleteCardsBtn">× Delete Cards</button>
+        <hr>
+        <!-- View Controls -->
+        <button id="openAllBtn">🔽 Open All Cards</button>
+        <button id="closeAllBtn">🔼 Close All Cards</button>
+        <button id="toggleViewBtn">Show open cards only</button>
+        <hr>
+        <!-- Dark Mode Toggle -->
+        <label>
+          <input type="checkbox" id="darkModeToggle">
+          Dark Mode
+        </label>
+        <hr>
+        <!-- Reset -->
+        <button id="resetBtn">Reset</button>
+      </div>
+    </nav>
+
+    <div id="listName"></div>
+    <main id="app"></main>
+  </div>
+
+  <div id="speedOverlay">
+    <label for="speedRange">Pronunciation Speed: <span id="speedValue">1.0</span>x</label>
+    <input id="speedRange" type="range" min="0.4" max="2.0" step="0.1" />
+  </div>
+
+  <div id="customScrollbar" class="custom-scrollbar">
+    <div id="scrollThumb" class="thumb"></div>
+  </div>
+
+  <script>
+    // ─── Dark-Mode Logic ───
+    const htmlEl = document.documentElement;
+    const dmToggle = document.getElementById('darkModeToggle');
+    function applyDark(on) {
+      if (on) htmlEl.setAttribute('data-theme','dark');
+      else htmlEl.removeAttribute('data-theme');
+      localStorage.setItem('DeepCardsDark', on?'1':'0');
+    }
+    (()=>{
+      const saved = localStorage.getItem('DeepCardsDark');
+      if (saved===null) {
+        applyDark(window.matchMedia('(prefers-color-scheme: dark)').matches);
+      } else {
+        applyDark(saved==='1');
+      }
+      dmToggle.checked = htmlEl.getAttribute('data-theme')==='dark';
+    })();
+    dmToggle.addEventListener('change', e=> applyDark(e.target.checked));
+
+    // ─── Globals & storage ───
+    let speechRate = 1.0;
+    function loadRate(){
+      const r=parseFloat(localStorage.getItem('DeepCardsRate'));
+      speechRate = isNaN(r)?1.0:r;
+    }
+    function saveRate(){
+      localStorage.setItem('DeepCardsRate',speechRate.toString());
+    }
+
+    // ─── iOS unlock for TTS ───
+    function unlockAudioAndSpeech(){
+      if (window.audioContext && audioContext.state==='suspended') audioContext.resume();
+      if ('speechSynthesis' in window) speechSynthesis.getVoices();
+      document.body.removeEventListener('touchend',unlockAudioAndSpeech);
+      document.body.removeEventListener('click',unlockAudioAndSpeech);
+    }
+    document.body.addEventListener('touchend',unlockAudioAndSpeech,{once:true});
+    document.body.addEventListener('click',   unlockAudioAndSpeech,{once:true});
+
+    // ─── Voice polling ───
+    let voices=[], attempts=0, MAX_ATTEMPTS=50;
+    function loadVoices(){
+      voices = speechSynthesis.getVoices()||[];
+      if (voices.length>0||attempts>=MAX_ATTEMPTS) populateVoiceSelect();
+      else { attempts++; setTimeout(loadVoices,200); }
+    }
+    speechSynthesis.onvoiceschanged = loadVoices;
+    window.addEventListener('load', loadVoices);
+
+    // ─── Store load/save ───
+    function loadStore(){
+      let raw=localStorage.getItem('DeepCards'), store;
+      if (!raw){
+        store={ lists:{}, current:null, lang:'zh-CN', voices:{} };
+      } else {
+        store=JSON.parse(raw);
+        if (typeof store.lang!=='string') store.lang='zh-CN';
+        if (typeof store.voices!=='object') store.voices={};
+        if (typeof store.lists!=='object') store.lists={};
+      }
+      localStorage.setItem('DeepCards',JSON.stringify(store));
+      return store;
+    }
+    function saveStore(){
+      localStorage.setItem('DeepCards',JSON.stringify(store));
+    }
+    const store = loadStore();
+    let words=[], currentListId=store.current, currentListName='',
+        currentLang=store.lang, viewOpenOnly=false,
+        editMode=false, deleteMode=false;
+
+    // ─── TTS ───
+    const langSel  = document.getElementById('langSelect'),
+          voiceSel = document.getElementById('voiceSelect');
+    function populateVoiceSelect(){
+      const code=currentLang, base=code.split('-')[0];
+      let list=voices.filter(v=>v.lang===code||v.lang.startsWith(base));
+      if (!list.length) list=voices;
+      voiceSel.innerHTML='';
+      list.forEach(v=>{
+        const o=document.createElement('option');
+        o.value=v.name; o.textContent=`${v.name} (${v.lang})`;
+        voiceSel.appendChild(o);
+      });
+      const saved=store.voices[currentLang];
+      if (saved && list.some(v=>v.name===saved)) voiceSel.value=saved;
+    }
+    function speak(txt){
+      speechSynthesis.cancel();
+      const msg=new SpeechSynthesisUtterance(txt);
+      msg.lang=currentLang;
+      msg.rate=speechRate;
+      const chosen=voices.find(v=>v.name===voiceSel.value)
+                  ||voices.find(v=>v.lang===currentLang)
+                  ||voices.find(v=>v.lang.startsWith(currentLang.split('-')[0]));
+      if (chosen) msg.voice=chosen;
+      speechSynthesis.speak(msg);
+    }
+    voiceSel.onchange=e=>{
+      store.voices[currentLang]=e.target.value;
+      saveStore();
+    };
+
+    // ─── Languages List ───
+    const availableLanguages=[
+      {label:'Chinese',code:'zh-CN'},{label:'English',code:'en-US'},
+      {label:'French',code:'fr-FR'},{label:'Italian',code:'it-IT'},
+      {label:'Portuguese',code:'pt-PT'},{label:'Spanish',code:'es-ES'},
+      {label:'----------',code:''},
+      {label:'Arabic',code:'ar-EG'},{label:'Brazilian',code:'pt-BR'},
+      {label:'Bulgarian',code:'bg-BG'},{label:'Czech',code:'cs-CZ'},
+      {label:'Danish',code:'da-DK'},{label:'Dutch',code:'nl-NL'},
+      {label:'Estonian',code:'et-EE'},{label:'Finnish',code:'fi-FI'},
+      {label:'German',code:'de-DE'},{label:'Greek',code:'el-GR'},
+      {label:'Hindi',code:'hi-IN'},{label:'Hungarian',code:'hu-HU'},
+      {label:'Indonesian',code:'id-ID'},{label:'Japanese',code:'ja-JP'},
+      {label:'Korean',code:'ko-KR'},{label:'Latvian',code:'lv-LV'},
+      {label:'Lithuanian',code:'lt-LT'},{label:'Norwegian',code:'no-NO'},
+      {label:'Polish',code:'pl-PL'},{label:'Romanian',code:'ro-RO'},
+      {label:'Russian',code:'ru-RU'},{label:'Slovak',code:'sk-SK'},
+      {label:'Slovenian',code:'sl-SI'},{label:'Swedish',code:'sv-SE'},
+      {label:'Turkish',code:'tr-TR'},{label:'Ukrainian',code:'uk-UA'}
+    ];
+    availableLanguages.forEach(l=>{
+      const o=document.createElement('option');
+      o.value=l.code; o.textContent=l.label;
+      if (!l.code) o.disabled=true;
+      langSel.appendChild(o);
+    });
+    langSel.value=currentLang;
+    langSel.onchange=e=>{
+      currentLang=e.target.value;
+      store.lang=currentLang;
+      saveStore();
+      populateVoiceSelect();
+    };
+
+    // ─── Progress Indicator ───
+    function updateProgressIndicator(){
+      const total=words.length,
+            closed=words.filter(w=>!w.open).length,
+            txt=`${closed} / ${total} closed`;
+      document.getElementById('progressIndicator').textContent=txt;
+      document.getElementById('floatingProgress').textContent=txt;
+    }
+    function checkFloatingProgress(){
+      const hdr=document.querySelector('header');
+      document.getElementById('floatingProgress').style.display=
+        hdr.getBoundingClientRect().bottom<0?'block':'none';
+    }
+    window.addEventListener('scroll',checkFloatingProgress);
+
+    // ─── Helpers ───
+    function showTempMessage(text){
+      const m=document.createElement('div');
+      m.textContent=text;
+      Object.assign(m.style,{
+        position:'fixed',top:'50%',left:'50%',
+        transform:'translate(-50%,-50%)',
+        background:'rgba(0,0,0,0.7)',color:'#fff',
+        padding:'0.75rem 1rem',borderRadius:'8px',
+        zIndex:2000,textAlign:'center'
+      });
+      document.body.appendChild(m);
+      setTimeout(()=>document.body.removeChild(m),1500);
+    }
+    function downloadFile(name,content,mime='text/plain'){
+      const b=new Blob([content],{type:`${mime};charset=utf-8;`}),
+            u=URL.createObjectURL(b),
+            a=document.createElement('a');
+      a.href=u; a.download=name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(u);
+    }
+
+    // ─── CRUD & UI Wiring ───
+    function refreshNavSelect(){
+      const sel = document.getElementById('navListSelect');
+      sel.innerHTML = '';
+      // alphabetical
+      const entries = Object.entries(store.lists)
+        .sort(([,a],[,b])=>a.trueName.localeCompare(b.trueName));
+      entries.forEach(([id,lst])=>{
+        const o=document.createElement('option'),
+              lab=lst.trueName;
+        o.value=id;
+        o.textContent=lab.length>12?lab.slice(0,12)+'…':lab;
+        if (id===currentListId) o.selected=true;
+        sel.appendChild(o);
+      });
+    }
+    function loadWordList(id){
+      const lst=store.lists[id];
+      if (!lst) return false;
+      words=lst.words;
+      currentListId=id;
+      currentListName=lst.trueName;
+      store.current=id; saveStore();
+      return true;
+    }
+    function saveWordList(id,name,arr){
+      store.lists[id]={trueName:name,words:arr};
+      store.current=id; saveStore();
+      currentListId=id;
+      currentListName=name;
+      words=arr;
+    }
+    function deleteWordList(id){
+      delete store.lists[id];
+      if (store.current===id){
+        const k=Object.keys(store.lists);
+        store.current=k.length?k[0]:null;
+      }
+      saveStore();
+    }
+
+    function showLoader(){
+      document.getElementById('loader').style.display='block';
+      document.getElementById('listName').textContent='';
+      document.getElementById('app').innerHTML='';
+    }
+    function closeLoader(){
+      document.getElementById('loader').style.display='none';
+      if (currentListId){
+        document.getElementById('listName').textContent='List: '+currentListName;
+        render();
+      }
+    }
+    function showApp(){
+      closeLoader();
+      location.hash='#/cards';
+    }
+
+    function renameList(){
+      if (!currentListId) return;
+      const n=prompt('New name:',currentListName);
+      if (!n) return;
+      store.lists[currentListId].trueName=n;
+      currentListName=n; saveStore(); refreshNavSelect();
+      document.getElementById('listName').textContent='List: '+n;
+    }
+    function confirmDeleteList(){
+      if (!currentListId) return;
+      if (!confirm(`Delete list "${currentListName}"?`)) return;
+      deleteWordList(currentListId); refreshNavSelect();
+      if (store.current){
+        loadWordList(store.current);
+        document.getElementById('listName').textContent='List: '+currentListName;
+        showApp();
+      } else {
+        showLoader();
+      }
+    }
+
+    function editCard(w,i){
+      const h=prompt('Edit word:',w.hanzi); if(h===null) return;
+      const p=prompt('Edit pinyin:',w.pinyin); if(p===null) return;
+      const d=prompt('Edit definition:',w.definition||''); if(d===null) return;
+      w.hanzi=h; w.pinyin=p; w.definition=d;
+      saveStore(); render();
+    }
+    function deleteCard(w,i){
+      if(!confirm(`Delete card "${w.hanzi}"?`)) return;
+      words.splice(i,1); saveStore(); render();
+    }
+
+    const menu = document.getElementById('menuDropdown'),
+          menuBtn = document.getElementById('menuBtn'),
+          toggleViewBtn = document.getElementById('toggleViewBtn');
+    function updateToggleLabel(){
+      toggleViewBtn.textContent = viewOpenOnly
+        ? 'Show all cards'
+        : 'Show open cards only';
+    }
+    menuBtn.onclick=()=>{
+      if(menu.style.display==='block') menu.style.display='none';
+      else { updateToggleLabel(); menu.style.display='block'; }
+    };
+    document.addEventListener('click',e=>{
+      if(!menu.contains(e.target)&&e.target!==menuBtn)
+        menu.style.display='none';
+    });
+
+    // ─── Edit/Delete toggle logic ───
+    document.getElementById('editCardsBtn').onclick=()=>{
+      editMode=!editMode; if(editMode) deleteMode=false;
+      menu.style.display='none'; render();
+    };
+    document.getElementById('deleteCardsBtn').onclick=()=>{
+      deleteMode=!deleteMode; if(deleteMode) editMode=false;
+      menu.style.display='none'; render();
+    };
+
+    document.getElementById('toggleViewBtn').onclick=()=>{
+      viewOpenOnly=!viewOpenOnly; render(); updateToggleLabel(); menu.style.display='none';
+    };
+    document.getElementById('openAllBtn').onclick=()=>{
+      if(!confirm('Open all cards?')) return;
+      words.forEach(w=>w.open=true); saveStore(); render(); menu.style.display='none';
+    };
+    document.getElementById('closeAllBtn').onclick=()=>{
+      if(!confirm('Close all cards?')) return;
+      words.forEach(w=>w.open=false); saveStore(); render(); menu.style.display='none';
+    };
+    document.getElementById('loadNewBtn').onclick=()=>{
+      showLoader(); menu.style.display='none';
+      document.querySelector('input[value="new"]').checked=true;
+    };
+    document.getElementById('renameBtn').onclick=()=>{
+      renameList(); menu.style.display='none';
+    };
+    document.getElementById('deleteBtn').onclick=()=>{
+      confirmDeleteList(); menu.style.display='none';
+    };
+    document.getElementById('saveFileBtn').onclick=()=>{
+      const d=localStorage.getItem('DeepCards')||''; if(!d) return alert('No data to save.');
+      const t=new Date().toISOString().replace(/[:\-]/g,'').split('.')[0];
+      downloadFile(`DeepCards_${t}.json`,d,'application/json');
+    };
+    document.getElementById('restoreFileBtn').onclick=()=>{
+      const inp=document.createElement('input');
+      inp.type='file'; inp.accept='application/json';
+      inp.onchange=e=>{
+        const f=e.target.files[0]; if(!f) return;
+        const r=new FileReader();
+        r.onload=()=>{
+          let imp; try{ imp=JSON.parse(r.result); }catch{return alert('Invalid JSON');}
+          if(!imp.lists||typeof imp.lists!=='object') return alert('Needs top-level \"lists\".');
+          if(!confirm('Merge imported?')) return;
+          Object.assign(store.lists,imp.lists);
+          if(imp.current) store.current=imp.current;
+          if(imp.lang)    store.lang=imp.lang;
+          if(imp.voices)  store.voices=imp.voices;
+          saveStore(); alert('Import complete – reloading.'); location.reload();
+        };
+        r.readAsText(f);
+      };
+      inp.click();
+    };
+    document.getElementById('exportBtn').onclick=()=>{
+      if(!currentListId) return alert('No list loaded.');
+      const list=store.lists[currentListId];
+      const lines=list.words.map(w=>[w.hanzi,w.pinyin,w.definition]
+        .filter(Boolean).join('#')).join('\n');
+      const t=new Date().toISOString().replace(/[:\-]/g,'').split('.')[0];
+      const s=currentListName.replace(/[^a-z0-9]/gi,'_').substr(0,20);
+      downloadFile(`DeepCards_${s}_${t}.txt`,lines,'text/plain');
+    };
+    document.getElementById('resetBtn').onclick=()=>{
+      if(confirm('Reset all data?')){ localStorage.removeItem('DeepCards'); location.reload(); }
+    };
+    document.getElementById('closeLoader').onclick=closeLoader;
+
+    // ─── Load/Add button ───
+    document.getElementById('loadBtn').onclick=()=>{
+      const mode=document.querySelector('input[name=\"loadMode\"]:checked').value;
+      const lines=document.getElementById('rawInput').value.trim().split('\n');
+      const parsed=lines
+        .map(l=>l.split(/\s*[\t#]\s*/))
+        .filter(p=>p.length>=2)
+        .map(p=>({
+          hanzi:p[0],pinyin:p[1],
+          definition:p[2]||'',state:0,open:true
+        }));
+      if(!parsed.length) return alert('No valid lines');
+      if(mode==='new'){
+        const name=prompt('List name:','Vocab '+new Date().toLocaleString());
+        const id=Date.now().toString();
+        saveWordList(id,name,parsed);
+      } else {
+        if(!currentListId) return alert('No list loaded');
+        words=words.concat(parsed);
+        saveWordList(currentListId,currentListName,words);
+      }
+      refreshNavSelect(); showApp();
+    };
+
+    document.getElementById('navListSelect').onchange=e=>{
+      const id=e.target.value;
+      if(loadWordList(id)){
+        refreshNavSelect();
+        document.getElementById('listName').textContent='List: '+currentListName;
+        showApp();
+      }
+    };
+
+    // ─── Custom Scrollbar ───
+    const scrollbar=document.getElementById('customScrollbar'),
+          thumb=document.getElementById('scrollThumb');
+    let hideTimerScroll, isDragging=false, startY=0, startTop=0;
+    function showScrollbar(){
+      clearTimeout(hideTimerScroll);
+      scrollbar.classList.add('visible');
+      updateThumb();
+      hideTimerScroll=setTimeout(()=>scrollbar.classList.remove('visible'),1000);
+    }
+    function updateThumb(){
+      const doc=document.documentElement,
+            scrollTop=window.scrollY,
+            scrollHeight=doc.scrollHeight,
+            clientHeight=window.innerHeight;
+      const th=Math.max(30,(clientHeight/scrollHeight)*clientHeight);
+      thumb.style.height=th+'px';
+      const maxT=clientHeight-th,
+            ratio=scrollTop/(scrollHeight-clientHeight);
+      thumb.style.top=(ratio*maxT)+'px';
+    }
+    window.addEventListener('scroll',showScrollbar);
+    window.addEventListener('scroll',updateThumb);
+    thumb.addEventListener('pointerdown',e=>{
+      isDragging=true; startY=e.clientY;
+      startTop=parseFloat(thumb.style.top)||0;
+      document.body.style.userSelect='none';
+    });
+    document.addEventListener('pointermove',e=>{
+      if(!isDragging) return;
+      const delta=e.clientY-startY,
+            ch=window.innerHeight,
+            thh=thumb.clientHeight;
+      let newT=startTop+delta;
+      newT=Math.max(0,Math.min(newT,ch-thh));
+      thumb.style.top=newT+'px';
+      const doc=document.documentElement,
+            scrollHeight=doc.scrollHeight,
+            ratio=newT/(ch-thh);
+      window.scrollTo(0,ratio*(scrollHeight-ch));
+    });
+    document.addEventListener('pointerup',()=>{
+      if(isDragging){ isDragging=false; document.body.style.userSelect=''; }
+    });
+    document.addEventListener('pointercancel',()=>{
+      if(isDragging){ isDragging=false; document.body.style.userSelect=''; }
+    });
+
+    // ─── Slider logic ───
+    const overlay    = document.getElementById('speedOverlay'),
+          rangeEl    = document.getElementById('speedRange'),
+          valueEl    = document.getElementById('speedValue');
+    let hideTimer=null, interacting=false;
+    function scheduleHide(){
+      clearTimeout(hideTimer);
+      if(!interacting) hideTimer=setTimeout(hideSlider,3000);
+    }
+    function showSlider(){
+      interacting=false; clearTimeout(hideTimer);
+      valueEl.textContent=speechRate.toFixed(1);
+      rangeEl.value=speechRate.toFixed(1);
+      overlay.style.display='block';
+      scheduleHide();
+    }
+    function hideSlider(){ overlay.style.display='none'; }
+    document.addEventListener('keydown',e=>{ if(e.key==='Escape') hideSlider(); });
+    rangeEl.addEventListener('change',()=>{ saveRate(); hideSlider(); });
+    rangeEl.addEventListener('mousedown',()=>{ interacting=true; clearTimeout(hideTimer); });
+    rangeEl.addEventListener('touchstart',()=>{ interacting=true; clearTimeout(hideTimer); });
+    rangeEl.addEventListener('mouseup',()=>{ interacting=false; scheduleHide(); });
+    rangeEl.addEventListener('touchend',()=>{ interacting=false; scheduleHide(); });
+    rangeEl.addEventListener('input',()=>{ speechRate=parseFloat(rangeEl.value); valueEl.textContent=speechRate.toFixed(1); });
+
+    // ─── Long-press for slider ───
+    let lpTimer=null;
+    document.body.addEventListener('mousedown',startLP);
+    document.body.addEventListener('touchstart',startLP);
+    function startLP(e){
+      if(!e.target.classList.contains('toggle-btn')) return;
+      e.preventDefault();
+      lpTimer=setTimeout(showSlider,600);
+      document.body.addEventListener('mouseup',cancelLP,{once:true});
+      document.body.addEventListener('touchend',cancelLP,{once:true});
+    }
+    function cancelLP(){ clearTimeout(lpTimer); }
+
+    // ─── Recording logic with WAV fallback on iOS ───
+    let mediaRecorder=null, audioChunks=[], audioContext, streamSource, processor;
+    const isIos = /iP(hone|ad|od)/.test(navigator.platform);
+    function startRecording(container){
+      const btn=container.querySelector('.record-btn');
+      // stop existing
+      if(btn.classList.contains('recording')){
+        if(!isIos && mediaRecorder){ mediaRecorder.stop(); }
+        else { stopWavRecording(container); }
+        return;
+      }
+      // start
+      navigator.mediaDevices.getUserMedia({audio:true})
+        .then(stream=>{
+          if(!isIos && window.MediaRecorder){
+            // desktop/Android path
+            mediaRecorder=new MediaRecorder(stream);
+            audioChunks=[];
+            mediaRecorder.ondataavailable=e=>audioChunks.push(e.data);
+            mediaRecorder.onstop=()=>{
+              const blob=new Blob(audioChunks,{type:'audio/webm'});
+              attachPlayback(container,blob);
+              stream.getTracks().forEach(t=>t.stop());
+              btn.classList.remove('recording');
+              btn.textContent='🎤';
+            };
+            mediaRecorder.start();
+          } else {
+            // iOS fallback using WAV
+            audioContext = new (window.AudioContext||window.webkitAudioContext)();
+            streamSource = audioContext.createMediaStreamSource(stream);
+            processor = audioContext.createScriptProcessor(4096,1,1);
+            audioChunks=[]; // will hold Float32Arrays
+            processor.onaudioprocess = e=>{
+              audioChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+            };
+            streamSource.connect(processor);
+            processor.connect(audioContext.destination);
+            container._recStream = stream;
+          }
+          btn.classList.add('recording');
+          btn.textContent='⏹';
+        })
+        .catch(()=>alert('Microphone access denied'));
+    }
+function stopWavRecording(container){
+  // grab and stop the stream
+  const stream = container._recStream;
+  stream.getTracks().forEach(t => t.stop());
+
+  // tear down the nodes
+  processor.disconnect();
+  streamSource.disconnect();
+
+  // flatten all collected chunks into one Float32Array
+  let length = audioChunks.reduce((sum, a) => sum + a.length, 0);
+  let pcm    = new Float32Array(length), offset = 0;
+  audioChunks.forEach(chunk => {
+    pcm.set(chunk, offset);
+    offset += chunk.length;
+  });
+
+  // encode to WAV
+  const sampleRate = audioContext.sampleRate;
+  const wavBuffer  = encodeWAV(pcm, sampleRate);
+  const blob       = new Blob([wavBuffer], { type: 'audio/wav' });
+  attachPlayback(container, blob);
+
+  // ——— UI reset so the button returns to 🎤 ———
+  const btn = container.querySelector('.record-btn');
+  btn.classList.remove('recording');
+  btn.textContent = '🎤';
+
+  // clear out the stored stream reference
+  container._recStream = null;
+}
+
+    function encodeWAV(samples, sampleRate){
+      const buffer = new ArrayBuffer(44 + samples.length*2);
+      const view = new DataView(buffer);
+      function writeString(offset, str){
+        for(let i=0;i<str.length;i++) view.setUint8(offset+i,str.charCodeAt(i));
+      }
+      let offset=0;
+      writeString(offset,'RIFF'); offset+=4;
+      view.setUint32(offset,36+samples.length*2,true); offset+=4;
+      writeString(offset,'WAVE'); offset+=4;
+      writeString(offset,'fmt '); offset+=4;
+      view.setUint32(offset,16,true); offset+=4;
+      view.setUint16(offset,1,true); offset+=2;
+      view.setUint16(offset,1,true); offset+=2;
+      view.setUint32(offset,sampleRate,true); offset+=4;
+      view.setUint32(offset,sampleRate*2,true); offset+=4;
+      view.setUint16(offset,2,true); offset+=2;
+      view.setUint16(offset,16,true); offset+=2;
+      writeString(offset,'data'); offset+=4;
+      view.setUint32(offset,samples.length*2,true); offset+=4;
+      // PCM samples
+      for(let i=0;i<samples.length;i++){
+        let s = Math.max(-1,Math.min(1,samples[i]));
+        view.setInt16(offset, s<0?s*0x8000:s*0x7FFF,true);
+        offset+=2;
+      }
+      return view;
+    }
+    function attachPlayback(container,blob){
+      let existing=container.querySelector('audio');
+      if(existing) existing.remove();
+      const url=URL.createObjectURL(blob);
+      const audio=document.createElement('audio');
+      audio.className='playback'; audio.controls=true;
+      audio.src=url; container.appendChild(audio);
+    }
+
+    // ─── Initialize & Render ───
+    window.onload=()=>{
+      loadRate();
+      refreshNavSelect();
+      if(currentListId && loadWordList(currentListId)){
+        document.getElementById('listName').textContent='List: '+currentListName;
+        showApp();
+      } else {
+        showLoader();
+      }
+      window.onhashchange=render;
+      updateToggleLabel();
+      updateProgressIndicator();
+      checkFloatingProgress();
+      populateVoiceSelect();
+    };
+
+    function render(){
+      updateProgressIndicator();
+      const app=document.getElementById('app'),
+            route=location.hash.replace('#','')||'/cards';
+      app.innerHTML='';
+      if(route==='/cards'){
+        words.forEach((w,i)=>{
+          if(viewOpenOnly && !w.open) return;
+          const c=document.createElement('div');
+          c.className='card'+(w.open?' flipped':'');
+          if(w.open){
+            c.innerHTML=`
+              <span class="card-number">${i+1}.</span>
+              <span class="hanzi clickable">${w.hanzi}</span>
+              <button class="toggle-btn">▼</button><br>
+              <em>${w.pinyin}</em>${w.definition?`<br><small>${w.definition}</small>`:''}
+              <button class="record-btn">🎤</button>`;
+          } else {
+            c.innerHTML=`
+              <span class="card-number">${i+1}.</span>
+              <span class="hanzi clickable">${w.hanzi}</span>
+              <button class="toggle-btn">▶</button>`;
+          }
+          // click/toggle = pronounce on both tap & open/close
+c.addEventListener('click', e => {
+  // if the user clicked on the audio control itself, bail out
+  if ( e.target.closest('audio') ) return;
+
+  if ( e.target.classList.contains('toggle-btn') ) {
+    w.open = !w.open;
+    saveStore();
+    render();
+  }
+  speak(w.hanzi);
+});
+
+          // record button
+          const rec=c.querySelector('.record-btn');
+          if(rec){
+            rec.onclick=e=>{
+              e.stopPropagation();
+              startRecording(c);
+            };
+          }
+          if(editMode){
+            const b=document.createElement('button');
+            b.className='edit-btn'; b.textContent='🖉';
+            b.onclick=ev=>{ ev.stopPropagation(); editCard(w,i); };
+            c.appendChild(b);
+          }
+          if(deleteMode){
+            const b=document.createElement('button');
+            b.className='delete-btn'; b.textContent='×';
+            b.onclick=ev=>{ ev.stopPropagation(); deleteCard(w,i); };
+            c.appendChild(b);
+          }
+          app.appendChild(c);
+        });
+      }
+    }
+  </script>
+</body>
+</html>
